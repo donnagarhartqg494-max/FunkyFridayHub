@@ -1,4 +1,4 @@
--- FunkyFridayHub V19
+-- FunkyFridayHub V20
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -63,7 +63,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V19  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V20  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -346,10 +346,16 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
 
                 if ok and type(arrows) == "table" and type(arrowData) == "table" then
                     for _, arrow in ipairs(arrows) do
-                        if type(arrow) == "table" and arrow.Side == playerSide
+                        -- The game's side value is not the literal "Left"/"Right".
+                        -- Its own UI.CurrentSide is the authoritative side identifier.
+                        local currentSide = framework.UI.CurrentSide
+                        local ignoredTypes = { Death = true, Mechanic = true, Poison = true }
+                        if type(arrow) == "table" and arrow.Side == currentSide
                             and not arrow.Marked and type(arrow.Data) == "table"
                             and type(arrow.Data.Time) == "number"
-                            and type(arrow.Data.Position) == "number" then
+                            and type(arrow.Data.Position) == "number"
+                            and not (type(arrow.NoteDataConfigs) == "table"
+                                and ignoredTypes[arrow.NoteDataConfigs.Type]) then
 
                             local lanePosition = tostring(arrow.Data.Position % count)
                             local laneInfo = arrowData[lanePosition]
@@ -385,6 +391,8 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                                         task.wait(0.05)
                                     end
                                     release(capturedKey)
+                                    -- The game reference clears Marked after releasing the key.
+                                    pcall(function() capturedArrow.Marked = nil end)
                                 end)
                             end
                         end
@@ -755,4 +763,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V19 loaded. Chart-data AutoPlay with exact sustain lengths when available; GUI fallback enabled. Press F8 to toggle.")
+print("FunkyFridayHub V20 loaded. Chart-data AutoPlay with exact sustain lengths when available; GUI fallback enabled. Press F8 to toggle.")
