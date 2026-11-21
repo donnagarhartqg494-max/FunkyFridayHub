@@ -164,7 +164,7 @@ makeButton("SCAN GAME UI", 195, function()
     Status.Text = "SCAN COMPLETE: " .. found .. " matches + note details (see console)"
 end)
 
-makeButton("WATCH NOTES 15s", 245, function()
+makeButton("TRACK NOTE MOTION 8s", 245, function()
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     local fields = pg and pg:FindFirstChild("Window")
     fields = fields and fields:FindFirstChild("Game")
@@ -174,26 +174,23 @@ makeButton("WATCH NOTES 15s", 245, function()
         return
     end
 
-    Status.Text = "WATCHING NOTES: PLAY NOW"
-    print("=== WATCH NOTES START (15 seconds) ===")
-    local seen = {}
-    local function describe(obj, sideName, laneIndex, eventName)
-        if seen[obj] then return end
-        seen[obj] = true
-        local msg = eventName .. " " .. sideName .. " Lane" .. laneIndex
-            .. " :: " .. obj:GetFullName() .. " [" .. obj.ClassName .. "]"
-        if obj:IsA("GuiObject") then
-            msg = msg .. " Pos=" .. tostring(obj.AbsolutePosition)
-                .. " Size=" .. tostring(obj.AbsoluteSize)
-                .. " Visible=" .. tostring(obj.Visible)
-        end
-        for key, value in pairs(obj:GetAttributes()) do
-            msg = msg .. " Attr." .. key .. "=" .. tostring(value)
-        end
-        print(msg)
-        for _, child in ipairs(obj:GetChildren()) do
-            print("  CHILD", child.Name, child.ClassName)
-        end
+    Status.Text = "TRACKING: PLAY NOW"
+    print("=== NOTE MOTION TRACK START (8 seconds) ===")
+    local tracked = {}
+    local watchConnections = {}
+    local function addNote(obj, sideName, laneIndex)
+        if tracked[obj] or not obj:IsA("GuiObject") then return end
+        tracked[obj] = {
+            side = sideName,
+            lane = laneIndex,
+            name = obj.Name,
+            samples = 0
+        }
+        print("TRACK ADD", sideName, "Lane" .. laneIndex, obj.Name,
+            "Position", tostring(obj.Position),
+            "AbsolutePosition", tostring(obj.AbsolutePosition),
+            "AnchorPoint", tostring(obj.AnchorPoint),
+            "LayoutOrder", tostring(obj.LayoutOrder))
     end
 
     for _, sideName in ipairs({"Left", "Right"}) do
@@ -202,37 +199,43 @@ makeButton("WATCH NOTES 15s", 245, function()
         for laneIndex = 1, 4 do
             local lane = inner and inner:FindFirstChild("Lane" .. laneIndex)
             local notes = lane and lane:FindFirstChild("Notes")
+            local receptor = lane and lane:FindFirstChild("Receptor")
+            if receptor and receptor:IsA("GuiObject") then
+                print("RECEPTOR", sideName, "Lane" .. laneIndex,
+                    "Position", tostring(receptor.Position),
+                    "AbsolutePosition", tostring(receptor.AbsolutePosition),
+                    "Size", tostring(receptor.AbsoluteSize))
+            end
             if notes then
                 for _, obj in ipairs(notes:GetChildren()) do
-                    describe(obj, sideName, laneIndex, "EXISTING")
+                    addNote(obj, sideName, laneIndex)
                 end
-                connections[#connections + 1] = notes.ChildAdded:Connect(function(obj)
-                    describe(obj, sideName, laneIndex, "NEW")
-                end)
-                connections[#connections + 1] = notes.DescendantAdded:Connect(function(obj)
-                    describe(obj, sideName, laneIndex, "DESCENDANT")
+                watchConnections[#watchConnections + 1] = notes.ChildAdded:Connect(function(obj)
+                    addNote(obj, sideName, laneIndex)
                 end)
             end
         end
     end
 
-    local context = pg:FindFirstChild("VSRGContext")
-    if context then
-        for _, obj in ipairs(context:GetDescendants()) do
-            if obj:IsA("InputAction") or obj:IsA("InputBinding") then
-                print("INPUT MAP", obj:GetFullName(), obj.ClassName)
+    local started = os.clock()
+    while os.clock() - started < 8 do
+        for obj, info in pairs(tracked) do
+            if obj.Parent and obj:IsA("GuiObject") and info.samples < 12 then
+                info.samples += 1
+                print("NOTE SAMPLE", info.side, "Lane" .. info.lane,
+                    info.name, "t=" .. string.format("%.2f", os.clock() - started),
+                    "Y=" .. tostring(obj.AbsolutePosition.Y),
+                    "PosY=" .. tostring(obj.Position.Y.Scale) .. "," .. tostring(obj.Position.Y.Offset),
+                    "Visible=" .. tostring(obj.Visible))
             end
         end
+        task.wait(0.1)
     end
-
-    task.delay(15, function()
-        for _, c in ipairs(connections) do
-            pcall(function() c:Disconnect() end)
-        end
-        table.clear(connections)
-        Status.Text = "WATCH COMPLETE: CHECK OUTPUT"
-        print("=== WATCH NOTES END ===")
-    end)
+    for _, c in ipairs(watchConnections) do
+        pcall(function() c:Disconnect() end)
+    end
+    Status.Text = "TRACK COMPLETE: CHECK OUTPUT"
+    print("=== NOTE MOTION TRACK END ===")
 end)
 
 makeButton("HIDE MENU  [F8]", 295, function()
