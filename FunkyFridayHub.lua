@@ -1,4 +1,4 @@
--- FunkyFridayHub V12
+-- FunkyFridayHub V13
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -162,37 +162,44 @@ local function releaseLane(laneIndex)
 end
 
 local function getSustainExtent(note)
-    -- Detect even short sustain tails. The chart renders the head and tail
-    -- inside the note frame / LayeredSprite, so compare child geometry against
-    -- the note-head footprint rather than requiring a very tall child.
-    local width = math.max(1, note.AbsoluteSize.X)
-    local headHeight = width
-    local maxExtent = math.max(note.AbsoluteSize.Y, headHeight)
-    local foundTail = false
+    -- The chart's layered sprite may encode a tiny hold tail as a child
+    -- ImageLabel, a clipped frame, or a scaled region. Inspect all visible
+    -- GUI descendants and use a very low geometric threshold.
+    local noteW = math.max(1, note.AbsoluteSize.X)
+    local noteH = math.max(1, note.AbsoluteSize.Y)
+    local extent = math.max(0, noteH - noteW)
+    local named = false
+    local geometric = false
 
     for _, child in ipairs(note:GetDescendants()) do
         if child:IsA("GuiObject") and child.Visible then
-            local n = string.lower(child.Name)
-            local namedTail = string.find(n, "hold")
-                or string.find(n, "sustain")
-                or string.find(n, "tail")
-                or string.find(n, "body")
+            local nm = string.lower(child.Name)
+            if string.find(nm, "hold") or string.find(nm, "sustain")
+                or string.find(nm, "tail") or string.find(nm, "body")
+                or string.find(nm, "long") then
+                named = true
+                extent = math.max(extent, child.AbsoluteSize.Y)
+            end
+
             local h = child.AbsoluteSize.Y
-            -- A tail can be only a few pixels longer than the head.
-            if namedTail or h > headHeight + 6 then
-                foundTail = true
-                maxExtent = math.max(maxExtent, h)
+            local w = math.max(1, child.AbsoluteSize.X)
+            -- Even a small vertical extension beyond a head-sized sprite
+            -- can indicate a sustain. Avoid treating square layered art as tail.
+            if h > w + 2 and h > noteW * 0.35 then
+                geometric = true
+                extent = math.max(extent, h - math.min(w, noteW))
             end
         end
     end
 
-    if note.AbsoluteSize.Y > headHeight + 8 then
-        foundTail = true
-        maxExtent = math.max(maxExtent, note.AbsoluteSize.Y)
+    if noteH > noteW + 2 then
+        geometric = true
     end
-
-    if not foundTail then return nil end
-    return math.max(0, maxExtent - headHeight)
+    if named or geometric then
+        -- Keep a minimal nonzero hold for tiny tails that round to 1-2 px.
+        return math.max(3, extent)
+    end
+    return nil
 end
 
 local function isSustainNote(note)
@@ -202,8 +209,7 @@ end
 local function estimateHoldDuration(note, receptor, velocity)
     local extent = getSustainExtent(note)
     if not extent or velocity <= 0 then return 0.05 end
-    -- Small tails still receive a real hold; never force a one-second hold.
-    return math.clamp(extent / velocity, 0.06, 8)
+    return math.clamp(extent / velocity, 0.04, 8)
 end
 
 makeButton("PLAYER SIDE: LEFT  (CLICK TO SWITCH)", 95, function()
