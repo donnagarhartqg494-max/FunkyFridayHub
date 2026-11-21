@@ -1,4 +1,4 @@
--- FunkyFridayHub V13
+-- FunkyFridayHub V14
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -162,43 +162,29 @@ local function releaseLane(laneIndex)
 end
 
 local function getSustainExtent(note)
-    -- The chart's layered sprite may encode a tiny hold tail as a child
-    -- ImageLabel, a clipped frame, or a scaled region. Inspect all visible
-    -- GUI descendants and use a very low geometric threshold.
+    -- Return nil for taps, otherwise the estimated visible sustain length.
+    -- Detection is intentionally independent from hit scheduling.
     local noteW = math.max(1, note.AbsoluteSize.X)
     local noteH = math.max(1, note.AbsoluteSize.Y)
     local extent = math.max(0, noteH - noteW)
-    local named = false
-    local geometric = false
+    local found = noteH > noteW + 5
 
     for _, child in ipairs(note:GetDescendants()) do
-        if child:IsA("GuiObject") and child.Visible then
+        if child:IsA("GuiObject") then
             local nm = string.lower(child.Name)
-            if string.find(nm, "hold") or string.find(nm, "sustain")
-                or string.find(nm, "tail") or string.find(nm, "body")
-                or string.find(nm, "long") then
-                named = true
-                extent = math.max(extent, child.AbsoluteSize.Y)
-            end
-
             local h = child.AbsoluteSize.Y
             local w = math.max(1, child.AbsoluteSize.X)
-            -- Even a small vertical extension beyond a head-sized sprite
-            -- can indicate a sustain. Avoid treating square layered art as tail.
-            if h > w + 2 and h > noteW * 0.35 then
-                geometric = true
+            local named = string.find(nm, "hold") or string.find(nm, "sustain")
+                or string.find(nm, "tail") or string.find(nm, "body")
+                or string.find(nm, "long")
+            if named or h > w + 5 then
+                found = true
                 extent = math.max(extent, h - math.min(w, noteW))
             end
         end
     end
 
-    if noteH > noteW + 2 then
-        geometric = true
-    end
-    if named or geometric then
-        -- Keep a minimal nonzero hold for tiny tails that round to 1-2 px.
-        return math.max(3, extent)
-    end
+    if found then return math.max(4, extent) end
     return nil
 end
 
@@ -209,7 +195,7 @@ end
 local function estimateHoldDuration(note, receptor, velocity)
     local extent = getSustainExtent(note)
     if not extent or velocity <= 0 then return 0.05 end
-    return math.clamp(extent / velocity, 0.04, 8)
+    return math.clamp(extent / velocity, 0.05, 8)
 end
 
 makeButton("PLAYER SIDE: LEFT  (CLICK TO SWITCH)", 95, function()
@@ -302,10 +288,15 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                             local dt = now - prev.t
                             local velocity = dt > 0 and (noteY - prev.y) / dt or 0
                             if velocity > 250 then
-                                local timeToHit = (targetY - noteY) / velocity
+                                -- Trigger the note head using its leading edge.
+                                -- A note is marked seen only after a real hit window,
+                                -- so a missed velocity sample can be retried next frame.
+                                local hitY = targetY
+                                local timeToHit = (hitY - noteY) / velocity
                                 if timeToHit <= INPUT_LEAD and timeToHit >= -MAX_HIT_LATE then
+                                    local sustainExtent = getSustainExtent(note)
                                     seen[note] = true
-                                    if isSustainNote(note) then
+                                    if sustainExtent then
                                         if pressLane(laneData.index) then
                                             sustainHolds[laneData.index] = sustainHolds[laneData.index] or {}
                                             sustainHolds[laneData.index][note] = true
@@ -316,6 +307,9 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                                                 tapReleaseAt[laneData.index] or 0, now + 0.05)
                                         end
                                     end
+                                elseif timeToHit < -MAX_HIT_LATE then
+                                    -- Do not let a late/teleported object block later processing.
+                                    seen[note] = true
                                 end
                             end
                         end
