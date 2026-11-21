@@ -1,140 +1,93 @@
 
--- FunkyFridayHub V1
--- Roblox / Solara
--- GUI + manual key controls
+-- FunkyFridayHub V2
+-- GUI + key test + controls
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local CoreGui = game:GetService("CoreGui")
 
-local Player = Players.LocalPlayer
-local Running = false
-local MenuVisible = true
-local Unloaded = false
-
-local Keys = {
-    Enum.KeyCode.D,
-    Enum.KeyCode.F,
-    Enum.KeyCode.Space,
-    Enum.KeyCode.J,
-    Enum.KeyCode.K
-}
+local old = CoreGui:FindFirstChild("FunkyFridayHub")
+if old then old:Destroy() end
 
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "FunkyFridayHub"
 Screen.ResetOnSpawn = false
-Screen.Parent = game:GetService("CoreGui")
+Screen.Parent = CoreGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(420, 330)
-Main.Position = UDim2.new(0.5, -210, 0.5, -165)
-Main.BackgroundColor3 = Color3.fromRGB(20, 22, 30)
+Main.Size = UDim2.fromOffset(430, 350)
+Main.Position = UDim2.new(0.5, -215, 0.5, -175)
+Main.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
 Main.BorderSizePixel = 0
 Main.Parent = Screen
 
-local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0, 12)
-Corner.Parent = Main
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
 
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 50)
-Title.BackgroundTransparency = 1
-Title.Text = "FunkyFridayHub"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 23
-Title.Font = Enum.Font.GothamBold
-Title.Parent = Main
-
-local Status = Instance.new("TextLabel")
-Status.Position = UDim2.fromOffset(20, 65)
-Status.Size = UDim2.new(1, -40, 0, 30)
-Status.BackgroundTransparency = 1
-Status.Text = "STATUS: STOPPED"
-Status.TextColor3 = Color3.fromRGB(255, 100, 100)
-Status.TextSize = 15
-Status.Font = Enum.Font.Gotham
-Status.Parent = Main
-
-local function createButton(name, y, callback)
-    local Button = Instance.new("TextButton")
-    Button.Size = UDim2.new(1, -40, 0, 42)
-    Button.Position = UDim2.fromOffset(20, y)
-    Button.BackgroundColor3 = Color3.fromRGB(43, 48, 65)
-    Button.Text = name
-    Button.TextColor3 = Color3.new(1, 1, 1)
-    Button.TextSize = 15
-    Button.Font = Enum.Font.GothamBold
-    Button.Parent = Main
-
-    local C = Instance.new("UICorner")
-    C.CornerRadius = UDim.new(0, 8)
-    C.Parent = Button
-
-    Button.MouseButton1Click:Connect(callback)
-    return Button
+local function label(text, pos, size)
+    local obj = Instance.new("TextLabel")
+    obj.Position = pos
+    obj.Size = size
+    obj.BackgroundTransparency = 1
+    obj.Text = text
+    obj.TextColor3 = Color3.new(1,1,1)
+    obj.Font = Enum.Font.GothamBold
+    obj.TextSize = 17
+    obj.Parent = Main
+    return obj
 end
 
-createButton("START", 110, function()
-    Running = true
+label("FunkyFridayHub V2", UDim2.fromOffset(15,10),
+    UDim2.new(1,-30,0,40))
+
+local Status = label("STATUS: READY",
+    UDim2.fromOffset(20,55), UDim2.new(1,-40,0,30))
+
+local function button(text, y, callback)
+    local b = Instance.new("TextButton")
+    b.Position = UDim2.fromOffset(20,y)
+    b.Size = UDim2.new(1,-40,0,42)
+    b.BackgroundColor3 = Color3.fromRGB(48,54,75)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Text = text
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 15
+    b.Parent = Main
+    Instance.new("UICorner",b).CornerRadius = UDim.new(0,8)
+    b.MouseButton1Click:Connect(callback)
+    return b
+end
+
+local running = false
+
+button("START",105,function()
+    running = true
     Status.Text = "STATUS: RUNNING"
-    Status.TextColor3 = Color3.fromRGB(80, 230, 130)
+    Status.TextColor3 = Color3.fromRGB(80,230,130)
 end)
 
-createButton("STOP", 162, function()
-    Running = false
+button("STOP",155,function()
+    running = false
     Status.Text = "STATUS: STOPPED"
-    Status.TextColor3 = Color3.fromRGB(255, 100, 100)
+    Status.TextColor3 = Color3.fromRGB(255,100,100)
 end)
 
-createButton("HIDE MENU", 214, function()
+button("KEYBOARD TEST",205,function()
+    Status.Text = "KEYS: D F SPACE J K"
+end)
+
+button("HIDE MENU [F8]",255,function()
     Main.Visible = false
-    MenuVisible = false
 end)
 
-createButton("UNLOAD", 266, function()
-    Unloaded = true
-    Running = false
+button("UNLOAD",305,function()
+    running = false
     Screen:Destroy()
 end)
 
 UIS.InputBegan:Connect(function(input, processed)
-    if processed or Unloaded then return end
-
     if input.KeyCode == Enum.KeyCode.F8 then
-        MenuVisible = not MenuVisible
-        Main.Visible = MenuVisible
+        Main.Visible = not Main.Visible
     end
 end)
 
--- Drag window
-local dragging = false
-local dragStart
-local startPos
-
-Title.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = Main.Position
-    end
-end)
-
-UIS.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        Main.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
-UIS.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
-
-print("FunkyFridayHub loaded!")
+print("FunkyFridayHub V2 loaded!")
