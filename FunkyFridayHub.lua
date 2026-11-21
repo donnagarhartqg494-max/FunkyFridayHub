@@ -1,4 +1,4 @@
--- FunkyFridayHub V22
+-- FunkyFridayHub V23
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -63,7 +63,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V22  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V23  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -376,7 +376,7 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                                 0,
                                 100
                             )
-                            if keyCode and noteTime >= 92 then
+                            if keyCode and noteTime >= 90 then
                                 arrow.Marked = true
                                 acquire(keyCode)
                                 local holdLength = math.max(0, tonumber(arrow.Data.Length) or 0)
@@ -400,8 +400,9 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                 elseif not ok then
                     warn("[FunkyFridayHub] Chart data read failed:", arrows)
                 end
-                -- Sample on the render frame for finer hit timing than task.wait().
-                game:GetService("RunService").RenderStepped:Wait()
+                -- Do not synchronize chart scanning with visual rendering.
+                -- This lets the scheduler resume the scanner independently of RenderStepped.
+                task.wait()
             end
             for _, enum in pairs(Enum.KeyCode:GetEnumItems()) do
                 if activeCounts[enum.Name] then
@@ -763,4 +764,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V22 loaded. Faster chart scanning and wider hit window enabled. Press F8 to toggle.")
+print("FunkyFridayHub V23 loaded. Scheduler-based chart scanning; 100ms hit window. Press F8 to toggle.")
