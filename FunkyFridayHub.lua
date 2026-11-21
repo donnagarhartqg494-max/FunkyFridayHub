@@ -1,6 +1,5 @@
--- FunkyFridayHub V3
--- Solara-friendly GUI, draggable window, UI diagnostics
--- AutoPlay is intentionally not enabled until the game's note objects are identified.
+-- FunkyFridayHub V5
+-- Predictive two-side AutoPlay, draggable GUI, diagnostics.
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -31,8 +30,8 @@ end
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(430, 470)
-Main.Position = UDim2.new(0.5, -215, 0.5, -235)
+Main.Size = UDim2.fromOffset(430, 420)
+Main.Position = UDim2.new(0.5, -215, 0.5, -210)
 Main.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -50,7 +49,8 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "FunkyFridayHub V3  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V5  |  DRAG HERE"
+Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
 Title.Font = Enum.Font.GothamBold
@@ -58,6 +58,26 @@ Title.AutoButtonColor = false
 Title.Active = true
 Title.Parent = Main
 Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 8)
+
+local Logo = Instance.new("TextLabel")
+Logo.Name = "Logo"
+Logo.Size = UDim2.fromOffset(34, 34)
+Logo.Position = UDim2.fromOffset(6, 5)
+Logo.BackgroundColor3 = Color3.fromRGB(112, 75, 220)
+Logo.BorderSizePixel = 0
+Logo.Text = "♫"
+Logo.TextColor3 = Color3.fromRGB(255, 255, 255)
+Logo.TextSize = 25
+Logo.Font = Enum.Font.GothamBlack
+Logo.Parent = Title
+Instance.new("UICorner", Logo).CornerRadius = UDim.new(0, 9)
+local LogoGradient = Instance.new("UIGradient")
+LogoGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(67, 190, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(173, 76, 255))
+})
+LogoGradient.Rotation = 35
+LogoGradient.Parent = Logo
 
 local Status = Instance.new("TextLabel")
 Status.Size = UDim2.new(1, -40, 0, 30)
@@ -88,8 +108,8 @@ end
 
 local running = false
 local connections = {}
-local selectedSide = "Left"
 local pressedKeys = {}
+local lastPress = {}
 local keyCodes = {Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.W, Enum.KeyCode.D}
 local keyHex = {0x41, 0x53, 0x57, 0x44}
 local virtualInput
@@ -106,7 +126,8 @@ local function sendKey(laneIndex, isDown)
     end
     local fn = isDown and keypress or keyrelease
     if type(fn) == "function" then
-        return pcall(fn, keyHex[laneIndex])
+        local ok = pcall(fn, keyHex[laneIndex])
+        return ok
     end
     return false
 end
@@ -118,59 +139,100 @@ local function releaseAll()
     end
 end
 
-makeButton("START AUTOPLAY", 95, function()
+local function tapLane(laneIndex)
+    local now = os.clock()
+    if pressedKeys[laneIndex] or (lastPress[laneIndex] and now - lastPress[laneIndex] < 0.035) then
+        return
+    end
+    local ok = sendKey(laneIndex, true)
+    if not ok then
+        running = false
+        Status.Text = "INPUT BLOCKED BY EXECUTOR"
+        Status.TextColor3 = Color3.fromRGB(255, 110, 110)
+        releaseAll()
+        return
+    end
+    pressedKeys[laneIndex] = true
+    lastPress[laneIndex] = now
+    task.delay(0.035, function()
+        if pressedKeys[laneIndex] then
+            sendKey(laneIndex, false)
+            pressedKeys[laneIndex] = nil
+        end
+    end)
+end
+
+makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
     if running then return end
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     local fields = pg and pg:FindFirstChild("Window")
     fields = fields and fields:FindFirstChild("Game")
     fields = fields and fields:FindFirstChild("Fields")
-    local side = fields and fields:FindFirstChild(selectedSide)
-    local inner = side and side:FindFirstChild("Inner")
-    if not inner then
-        Status.Text = "GAME FIELD NOT FOUND"
+    if not fields then
+        Status.Text = "GAME FIELDS NOT FOUND"
         return
     end
+
+    local lanes = {}
+    for _, sideName in ipairs({"Left", "Right"}) do
+        local side = fields:FindFirstChild(sideName)
+        local inner = side and side:FindFirstChild("Inner")
+        for laneIndex = 1, 4 do
+            local lane = inner and inner:FindFirstChild("Lane" .. laneIndex)
+            local notes = lane and lane:FindFirstChild("Notes")
+            local receptor = lane and lane:FindFirstChild("Receptor")
+            if notes and receptor and receptor:IsA("GuiObject") then
+                lanes[#lanes + 1] = {
+                    side = sideName,
+                    index = laneIndex,
+                    notes = notes,
+                    receptor = receptor
+                }
+            end
+        end
+    end
+    if #lanes == 0 then
+        Status.Text = "NO NOTE LANES FOUND"
+        return
+    end
+
     running = true
-    Status.Text = "AUTOPLAY: " .. string.upper(selectedSide)
+    Status.Text = "AUTOPLAY ACTIVE: LEFT + RIGHT"
     Status.TextColor3 = Color3.fromRGB(110, 230, 150)
     task.spawn(function()
-        local noteStates = {}
+        local seen = {}
+        local lastPositions = {}
+        local INPUT_LEAD = 0.085 -- compensate for executor/game input latency
+        local MAX_HIT_LATE = 0.025
         while running do
-            for laneIndex = 1, 4 do
-                local lane = inner:FindFirstChild("Lane" .. laneIndex)
-                local notes = lane and lane:FindFirstChild("Notes")
-                local receptor = lane and lane:FindFirstChild("Receptor")
-                if notes and receptor and receptor:IsA("GuiObject") then
-                    local targetY = receptor.AbsolutePosition.Y
-                    for _, note in ipairs(notes:GetChildren()) do
-                        if note:IsA("GuiObject") and not noteStates[note] then
-                            local noteY = note.AbsolutePosition.Y
-                            if note.Visible and noteY >= targetY - 24 then
-                                noteStates[note] = true
-                                if not pressedKeys[laneIndex] then
-                                    local ok = sendKey(laneIndex, true)
-                                    if ok then
-                                        pressedKeys[laneIndex] = true
-                                        task.delay(0.045, function()
-                                            if pressedKeys[laneIndex] then
-                                                sendKey(laneIndex, false)
-                                                pressedKeys[laneIndex] = nil
-                                            end
-                                        end)
-                                    else
-                                        running = false
-                                        Status.Text = "INPUT BLOCKED: SOLARA"
-                                        Status.TextColor3 = Color3.fromRGB(255, 110, 110)
-                                        break
-                                    end
+            local now = os.clock()
+            for _, laneData in ipairs(lanes) do
+                local receptor = laneData.receptor
+                local targetY = receptor.AbsolutePosition.Y + receptor.AbsoluteSize.Y * 0.5
+                for _, note in ipairs(laneData.notes:GetChildren()) do
+                    if note:IsA("GuiObject") and note.Visible and not seen[note] then
+                        local noteY = note.AbsolutePosition.Y + note.AbsoluteSize.Y * 0.5
+                        local prev = lastPositions[note]
+                        if prev then
+                            local dt = now - prev.t
+                            local velocity = dt > 0 and (noteY - prev.y) / dt or 0
+                            if velocity > 250 then
+                                local timeToHit = (targetY - noteY) / velocity
+                                if timeToHit <= INPUT_LEAD and timeToHit >= -MAX_HIT_LATE then
+                                    seen[note] = true
+                                    tapLane(laneData.index)
                                 end
                             end
                         end
+                        lastPositions[note] = {y = noteY, t = now}
                     end
                 end
             end
-            for note in pairs(noteStates) do
-                if not note.Parent then noteStates[note] = nil end
+            for note in pairs(seen) do
+                if not note.Parent then seen[note] = nil end
+            end
+            for note in pairs(lastPositions) do
+                if not note.Parent then lastPositions[note] = nil end
             end
             task.wait()
         end
@@ -185,13 +247,7 @@ makeButton("STOP AUTOPLAY", 145, function()
     Status.TextColor3 = Color3.fromRGB(255, 110, 110)
 end)
 
-local sideButton = makeButton("SIDE: LEFT (CLICK TO SWITCH)", 195, function()
-    selectedSide = selectedSide == "Left" and "Right" or "Left"
-    sideButton.Text = "SIDE: " .. string.upper(selectedSide) .. " (CLICK TO SWITCH)"
-    Status.Text = "SELECTED SIDE: " .. string.upper(selectedSide)
-end)
-
-makeButton("SCAN GAME UI", 245, function()
+makeButton("SCAN GAME UI", 195, function()
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     if not pg then
         Status.Text = "PlayerGui not found"
@@ -254,7 +310,7 @@ makeButton("SCAN GAME UI", 245, function()
     Status.Text = "SCAN COMPLETE: " .. found .. " matches + note details (see console)"
 end)
 
-makeButton("TRACK NOTE MOTION 8s", 295, function()
+makeButton("TRACK NOTE MOTION 8s", 245, function()
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     local fields = pg and pg:FindFirstChild("Window")
     fields = fields and fields:FindFirstChild("Game")
@@ -328,11 +384,11 @@ makeButton("TRACK NOTE MOTION 8s", 295, function()
     print("=== NOTE MOTION TRACK END ===")
 end)
 
-makeButton("HIDE MENU  [F8]", 345, function()
+makeButton("HIDE MENU  [F8]", 295, function()
     Main.Visible = false
 end)
 
-makeButton("UNLOAD", 395, function()
+makeButton("UNLOAD", 345, function()
     running = false
     releaseAll()
     for _, c in ipairs(connections) do
@@ -346,14 +402,16 @@ local dragging = false
 local dragStart = nil
 local startPosition = nil
 
-connections[#connections + 1] = Title.InputBegan:Connect(function(input)
+local function beginDrag(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
         startPosition = Main.Position
     end
-end)
+end
+connections[#connections + 1] = Title.InputBegan:Connect(beginDrag)
+connections[#connections + 1] = Logo.InputBegan:Connect(beginDrag)
 
 connections[#connections + 1] = UIS.InputChanged:Connect(function(input)
     if not dragging then return end
@@ -382,4 +440,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V4 loaded. AutoPlay: choose side, then START. Keys A/S/W/D. Press F8 to toggle.")
+print("FunkyFridayHub V5 loaded. Predictive AutoPlay scans both sides. Keys A/S/W/D. Press F8 to toggle.")
