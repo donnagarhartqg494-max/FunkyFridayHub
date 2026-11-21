@@ -164,7 +164,78 @@ makeButton("SCAN GAME UI", 195, function()
     Status.Text = "SCAN COMPLETE: " .. found .. " matches + note details (see console)"
 end)
 
-makeButton("HIDE MENU  [F8]", 245, function()
+makeButton("WATCH NOTES 15s", 245, function()
+    local pg = Player:FindFirstChildOfClass("PlayerGui")
+    local fields = pg and pg:FindFirstChild("Window")
+    fields = fields and fields:FindFirstChild("Game")
+    fields = fields and fields:FindFirstChild("Fields")
+    if not fields then
+        Status.Text = "GAME FIELDS NOT FOUND"
+        return
+    end
+
+    Status.Text = "WATCHING NOTES: PLAY NOW"
+    print("=== WATCH NOTES START (15 seconds) ===")
+    local seen = {}
+    local function describe(obj, sideName, laneIndex, eventName)
+        if seen[obj] then return end
+        seen[obj] = true
+        local msg = eventName .. " " .. sideName .. " Lane" .. laneIndex
+            .. " :: " .. obj:GetFullName() .. " [" .. obj.ClassName .. "]"
+        if obj:IsA("GuiObject") then
+            msg = msg .. " Pos=" .. tostring(obj.AbsolutePosition)
+                .. " Size=" .. tostring(obj.AbsoluteSize)
+                .. " Visible=" .. tostring(obj.Visible)
+        end
+        for key, value in pairs(obj:GetAttributes()) do
+            msg = msg .. " Attr." .. key .. "=" .. tostring(value)
+        end
+        print(msg)
+        for _, child in ipairs(obj:GetChildren()) do
+            print("  CHILD", child.Name, child.ClassName)
+        end
+    end
+
+    for _, sideName in ipairs({"Left", "Right"}) do
+        local side = fields:FindFirstChild(sideName)
+        local inner = side and side:FindFirstChild("Inner")
+        for laneIndex = 1, 4 do
+            local lane = inner and inner:FindFirstChild("Lane" .. laneIndex)
+            local notes = lane and lane:FindFirstChild("Notes")
+            if notes then
+                for _, obj in ipairs(notes:GetChildren()) do
+                    describe(obj, sideName, laneIndex, "EXISTING")
+                end
+                connections[#connections + 1] = notes.ChildAdded:Connect(function(obj)
+                    describe(obj, sideName, laneIndex, "NEW")
+                end)
+                connections[#connections + 1] = notes.DescendantAdded:Connect(function(obj)
+                    describe(obj, sideName, laneIndex, "DESCENDANT")
+                end)
+            end
+        end
+    end
+
+    local context = pg:FindFirstChild("VSRGContext")
+    if context then
+        for _, obj in ipairs(context:GetDescendants()) do
+            if obj:IsA("InputAction") or obj:IsA("InputBinding") then
+                print("INPUT MAP", obj:GetFullName(), obj.ClassName)
+            end
+        end
+    end
+
+    task.delay(15, function()
+        for _, c in ipairs(connections) do
+            pcall(function() c:Disconnect() end)
+        end
+        table.clear(connections)
+        Status.Text = "WATCH COMPLETE: CHECK OUTPUT"
+        print("=== WATCH NOTES END ===")
+    end)
+end)
+
+makeButton("HIDE MENU  [F8]", 295, function()
     Main.Visible = false
 end)
 
