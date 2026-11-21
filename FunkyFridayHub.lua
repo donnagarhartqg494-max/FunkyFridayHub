@@ -124,8 +124,44 @@ makeButton("SCAN GAME UI", 195, function()
             print(obj:GetFullName(), obj.ClassName .. p)
         end
     end
+    print("=== NOTE OBJECT DETAILS ===")
+    local fields = pg:FindFirstChild("Window")
+    fields = fields and fields:FindFirstChild("Game")
+    fields = fields and fields:FindFirstChild("Fields")
+    for _, sideName in ipairs({"Left", "Right"}) do
+        local side = fields and fields:FindFirstChild(sideName)
+        local inner = side and side:FindFirstChild("Inner")
+        for laneIndex = 1, 4 do
+            local lane = inner and inner:FindFirstChild("Lane" .. laneIndex)
+            local notes = lane and lane:FindFirstChild("Notes")
+            print("---", sideName, "Lane" .. laneIndex, "NotesFolder=", notes and notes.ClassName or "MISSING")
+            if notes then
+                local children = notes:GetChildren()
+                print("Direct note count:", #children)
+                for i = 1, math.min(#children, 8) do
+                    local note = children[i]
+                    local details = note.Name .. " [" .. note.ClassName .. "]"
+                    if note:IsA("GuiObject") then
+                        details = details .. " Pos=" .. tostring(note.AbsolutePosition)
+                            .. " Size=" .. tostring(note.AbsoluteSize)
+                            .. " Visible=" .. tostring(note.Visible)
+                    end
+                    if note:IsA("ImageLabel") or note:IsA("ImageButton") then
+                        details = details .. " Image=" .. tostring(note.Image)
+                    end
+                    print(details)
+                    for key, value in pairs(note:GetAttributes()) do
+                        print("  Attribute:", key, tostring(value))
+                    end
+                    for _, child in ipairs(note:GetChildren()) do
+                        print("  Child:", child.Name, child.ClassName)
+                    end
+                end
+            end
+        end
+    end
     print("=== Scan complete. Matches:", found, "===")
-    Status.Text = "UI SCAN COMPLETE: " .. found .. " matches (see console)"
+    Status.Text = "SCAN COMPLETE: " .. found .. " matches + note details (see console)"
 end)
 
 makeButton("HIDE MENU  [F8]", 245, function()
