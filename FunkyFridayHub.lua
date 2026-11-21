@@ -49,7 +49,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V10  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V17  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -253,6 +253,139 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
     Status.Text = "AUTOPLAY: " .. string.upper(playerSide) .. " SIDE ONLY"
     Status.TextColor3 = Color3.fromRGB(110, 230, 150)
     task.spawn(function()
+        -- Prefer Funky Friday's internal chart data when the executor exposes it.
+        -- This gives exact note timing and Data.Length for sustains; GUI scanning
+        -- remains as a fallback for executors without getgc access.
+        local framework
+        if type(getgc) == "function" then
+            pcall(function()
+                for _, obj in ipairs(getgc(true)) do
+                    if type(obj) == "table" and rawget(obj, "GameUI")
+                        and type(rawget(obj, "UI")) == "table"
+                        and type(rawget(obj, "SongPlayer")) == "table"
+                        and type(rawget(obj, "ArrowData")) == "table" then
+                        framework = obj
+                        break
+                    end
+                end
+            end)
+        end
+
+        if framework then
+            local enumByValue = {}
+            for _, enum in ipairs(Enum.KeyCode:GetEnumItems()) do
+                enumByValue[enum.Value] = enum
+            end
+            local activeCounts = {}
+            local function frameworkKey(keyCode, down)
+                if not keyCode then return false end
+                if virtualInput then
+                    local ok = pcall(function()
+                        virtualInput:SendKeyEvent(down, keyCode, false, nil)
+                    end)
+                    if ok then return true end
+                end
+                local fn = down and keypress or keyrelease
+                local hex = string.byte(string.upper(keyCode.Name))
+                if type(fn) == "function" and hex then
+                    return pcall(fn, hex)
+                end
+                return false
+            end
+            local function acquire(keyCode)
+                local name = keyCode.Name
+                activeCounts[name] = (activeCounts[name] or 0) + 1
+                if activeCounts[name] == 1 then frameworkKey(keyCode, true) end
+            end
+            local function release(keyCode)
+                if not keyCode then return end
+                local name = keyCode.Name
+                activeCounts[name] = math.max(0, (activeCounts[name] or 1) - 1)
+                if activeCounts[name] == 0 then
+                    frameworkKey(keyCode, false)
+                    activeCounts[name] = nil
+                end
+            end
+
+            Status.Text = "AUTOPLAY: CHART DATA MODE"
+            print("[FunkyFridayHub] Internal chart data found; exact sustain lengths enabled.")
+            while running do
+                local ok, arrows, count, mode, arrowData, songTime, playbackSpeed =
+                    pcall(function()
+                        local currentSound = framework.SongPlayer.CurrentlyPlaying
+                        if typeof(currentSound) ~= "Instance" or not currentSound:IsA("Sound")
+                            or currentSound.TimePosition <= 0 then
+                            return {}, 4, "4Key", nil, 0, 1
+                        end
+                        local n = framework.SongPlayer:GetKeyCount()
+                        local m = tostring(n) .. "Key"
+                        local data = framework.ArrowData[m].Arrows
+                        local speed = 1
+                        local configs = framework.SongPlayer.CurrentSongConfigs
+                        if type(configs) == "table" and type(configs.PlaybackSpeed) == "number"
+                            and configs.PlaybackSpeed > 0 then
+                            speed = configs.PlaybackSpeed
+                        end
+                        local time = framework.SongPlayer.CurrentTime / speed
+                        return framework.UI:GetNotes(), n, m, data, time, speed
+                    end)
+
+                if ok and type(arrows) == "table" and type(arrowData) == "table" then
+                    for _, arrow in ipairs(arrows) do
+                        if type(arrow) == "table" and arrow.Side == playerSide
+                            and not arrow.Marked and type(arrow.Data) == "table"
+                            and type(arrow.Data.Time) == "number"
+                            and type(arrow.Data.Position) == "number" then
+
+                            local lanePosition = tostring(arrow.Data.Position % count)
+                            local laneInfo = arrowData[lanePosition]
+                            local keyboard = laneInfo and laneInfo.Keybinds
+                                and laneInfo.Keybinds.Keyboard
+                            local keyCode = keyboard and enumByValue[keyboard[1]]
+                            local hitOffset = 0
+                            pcall(function()
+                                local settings = framework.Settings
+                                local value = settings and settings.HitboxOffset
+                                    and settings.HitboxOffset.Value
+                                if type(value) == "number" then hitOffset = value / 1000 end
+                            end)
+
+                            local delta = math.abs(arrow.Data.Time - (songTime + hitOffset))
+                            if keyCode and delta <= 0.04 then
+                                arrow.Marked = true
+                                acquire(keyCode)
+                                local holdLength = math.max(0, tonumber(arrow.Data.Length) or 0)
+                                local capturedArrow = arrow
+                                local capturedKey = keyCode
+                                task.spawn(function()
+                                    if holdLength > 0 then
+                                        task.wait(holdLength / playbackSpeed)
+                                    else
+                                        task.wait(0.05)
+                                    end
+                                    release(capturedKey)
+                                    -- Keep the note marked until the game removes it,
+                                    -- preventing a second hit while its object is still present.
+                                end)
+                            end
+                        end
+                    end
+                elseif not ok then
+                    warn("[FunkyFridayHub] Chart data read failed:", arrows)
+                end
+                task.wait()
+            end
+            for _, enum in pairs(Enum.KeyCode:GetEnumItems()) do
+                if activeCounts[enum.Name] then
+                    frameworkKey(enum, false)
+                    activeCounts[enum.Name] = nil
+                end
+            end
+            releaseAll()
+            return
+        end
+
+        warn("[FunkyFridayHub] Internal chart API unavailable; using GUI fallback.")
         local seen = {}
         local lastPositions = {}
         local sustainHolds = {}
@@ -602,4 +735,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V11 loaded. Manual side selection; sustain keys held until note object disappears. Keys A/S/W/D. Press F8 to toggle.")
+print("FunkyFridayHub V17 loaded. Chart-data AutoPlay with exact sustain lengths when available; GUI fallback enabled. Press F8 to toggle.")
