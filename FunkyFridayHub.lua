@@ -31,8 +31,8 @@ end
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(430, 370)
-Main.Position = UDim2.new(0.5, -215, 0.5, -185)
+Main.Size = UDim2.fromOffset(430, 470)
+Main.Position = UDim2.new(0.5, -215, 0.5, -235)
 Main.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -88,20 +88,110 @@ end
 
 local running = false
 local connections = {}
+local selectedSide = "Left"
+local pressedKeys = {}
+local keyCodes = {Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.W, Enum.KeyCode.D}
+local keyHex = {0x41, 0x53, 0x57, 0x44}
+local virtualInput
+pcall(function() virtualInput = game:GetService("VirtualInputManager") end)
 
-makeButton("START", 95, function()
+local function sendKey(laneIndex, isDown)
+    local keyCode = keyCodes[laneIndex]
+    if not keyCode then return false end
+    if virtualInput then
+        local ok = pcall(function()
+            virtualInput:SendKeyEvent(isDown, keyCode, false, game)
+        end)
+        if ok then return true end
+    end
+    local fn = isDown and keypress or keyrelease
+    if type(fn) == "function" then
+        return pcall(fn, keyHex[laneIndex])
+    end
+    return false
+end
+
+local function releaseAll()
+    for laneIndex in pairs(pressedKeys) do
+        sendKey(laneIndex, false)
+        pressedKeys[laneIndex] = nil
+    end
+end
+
+makeButton("START AUTOPLAY", 95, function()
+    if running then return end
+    local pg = Player:FindFirstChildOfClass("PlayerGui")
+    local fields = pg and pg:FindFirstChild("Window")
+    fields = fields and fields:FindFirstChild("Game")
+    fields = fields and fields:FindFirstChild("Fields")
+    local side = fields and fields:FindFirstChild(selectedSide)
+    local inner = side and side:FindFirstChild("Inner")
+    if not inner then
+        Status.Text = "GAME FIELD NOT FOUND"
+        return
+    end
     running = true
-    Status.Text = "STATUS: READY (AUTOPLAY NOT CONFIGURED)"
-    Status.TextColor3 = Color3.fromRGB(255, 205, 100)
+    Status.Text = "AUTOPLAY: " .. string.upper(selectedSide)
+    Status.TextColor3 = Color3.fromRGB(110, 230, 150)
+    task.spawn(function()
+        local noteStates = {}
+        while running do
+            for laneIndex = 1, 4 do
+                local lane = inner:FindFirstChild("Lane" .. laneIndex)
+                local notes = lane and lane:FindFirstChild("Notes")
+                local receptor = lane and lane:FindFirstChild("Receptor")
+                if notes and receptor and receptor:IsA("GuiObject") then
+                    local targetY = receptor.AbsolutePosition.Y
+                    for _, note in ipairs(notes:GetChildren()) do
+                        if note:IsA("GuiObject") and not noteStates[note] then
+                            local noteY = note.AbsolutePosition.Y
+                            if note.Visible and noteY >= targetY - 24 then
+                                noteStates[note] = true
+                                if not pressedKeys[laneIndex] then
+                                    local ok = sendKey(laneIndex, true)
+                                    if ok then
+                                        pressedKeys[laneIndex] = true
+                                        task.delay(0.045, function()
+                                            if pressedKeys[laneIndex] then
+                                                sendKey(laneIndex, false)
+                                                pressedKeys[laneIndex] = nil
+                                            end
+                                        end)
+                                    else
+                                        running = false
+                                        Status.Text = "INPUT BLOCKED: SOLARA"
+                                        Status.TextColor3 = Color3.fromRGB(255, 110, 110)
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            for note in pairs(noteStates) do
+                if not note.Parent then noteStates[note] = nil end
+            end
+            task.wait()
+        end
+        releaseAll()
+    end)
 end)
 
-makeButton("STOP", 145, function()
+makeButton("STOP AUTOPLAY", 145, function()
     running = false
+    releaseAll()
     Status.Text = "STATUS: STOPPED"
     Status.TextColor3 = Color3.fromRGB(255, 110, 110)
 end)
 
-makeButton("SCAN GAME UI", 195, function()
+local sideButton = makeButton("SIDE: LEFT (CLICK TO SWITCH)", 195, function()
+    selectedSide = selectedSide == "Left" and "Right" or "Left"
+    sideButton.Text = "SIDE: " .. string.upper(selectedSide) .. " (CLICK TO SWITCH)"
+    Status.Text = "SELECTED SIDE: " .. string.upper(selectedSide)
+end)
+
+makeButton("SCAN GAME UI", 245, function()
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     if not pg then
         Status.Text = "PlayerGui not found"
@@ -164,7 +254,7 @@ makeButton("SCAN GAME UI", 195, function()
     Status.Text = "SCAN COMPLETE: " .. found .. " matches + note details (see console)"
 end)
 
-makeButton("TRACK NOTE MOTION 8s", 245, function()
+makeButton("TRACK NOTE MOTION 8s", 295, function()
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     local fields = pg and pg:FindFirstChild("Window")
     fields = fields and fields:FindFirstChild("Game")
@@ -238,12 +328,13 @@ makeButton("TRACK NOTE MOTION 8s", 245, function()
     print("=== NOTE MOTION TRACK END ===")
 end)
 
-makeButton("HIDE MENU  [F8]", 295, function()
+makeButton("HIDE MENU  [F8]", 345, function()
     Main.Visible = false
 end)
 
-makeButton("UNLOAD", 295, function()
+makeButton("UNLOAD", 395, function()
     running = false
+    releaseAll()
     for _, c in ipairs(connections) do
         pcall(function() c:Disconnect() end)
     end
@@ -291,4 +382,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V3.1 loaded. Drag the highlighted title bar. Press F8 to toggle. AutoPlay is not yet configured.")
+print("FunkyFridayHub V4 loaded. AutoPlay: choose side, then START. Keys A/S/W/D. Press F8 to toggle.")
