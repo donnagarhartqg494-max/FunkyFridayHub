@@ -1,5 +1,5 @@
--- FunkyFridayHub V6
--- Predictive two-side AutoPlay with sustain-note holds.
+-- FunkyFridayHub V7
+-- Head-aligned predictive AutoPlay with sustain-note holds on both sides.
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -49,7 +49,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V6  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V7  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -228,7 +228,7 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
     task.spawn(function()
         local seen = {}
         local lastPositions = {}
-        local INPUT_LEAD = 0.085 -- compensate for executor/game input latency
+        local INPUT_LEAD = 0.035 -- small latency compensation only
         local MAX_HIT_LATE = 0.025
         while running do
             local now = os.clock()
@@ -240,10 +240,10 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
             end
             for _, laneData in ipairs(lanes) do
                 local receptor = laneData.receptor
-                local targetY = receptor.AbsolutePosition.Y + receptor.AbsoluteSize.Y * 0.5
+                local targetY = receptor.AbsolutePosition.Y
                 for _, note in ipairs(laneData.notes:GetChildren()) do
                     if note:IsA("GuiObject") and note.Visible and not seen[note] then
-                        local noteY = note.AbsolutePosition.Y + note.AbsoluteSize.Y * 0.5
+                        local noteY = note.AbsolutePosition.Y
                         local prev = lastPositions[note]
                         if prev then
                             local dt = now - prev.t
@@ -473,4 +473,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V6 loaded. Predictive AutoPlay + sustain holds on both sides. Keys A/S/W/D. Press F8 to toggle.")
+print("FunkyFridayHub V7 loaded. Note-head timing corrected; sustain holds enabled on both sides. Keys A/S/W/D. Press F8 to toggle.")
