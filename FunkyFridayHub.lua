@@ -1,4 +1,4 @@
--- FunkyFridayHub V20
+-- FunkyFridayHub V21
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -63,7 +63,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V20  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V21  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -345,11 +345,10 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                     end)
 
                 if ok and type(arrows) == "table" and type(arrowData) == "table" then
-                    for _, arrow in ipairs(arrows) do
-                        -- The game's side value is not the literal "Left"/"Right".
-                        -- Its own UI.CurrentSide is the authoritative side identifier.
-                        local currentSide = framework.UI.CurrentSide
-                        local ignoredTypes = { Death = true, Mechanic = true, Poison = true }
+                    local currentSide = framework.UI.CurrentSide
+                    local ignoredTypes = { Death = true, Mechanic = true, Poison = true }
+                    -- GetNotes() may be sparse, so iterate all entries.
+                    for _, arrow in next, arrows do
                         if type(arrow) == "table" and arrow.Side == currentSide
                             and not arrow.Marked and type(arrow.Data) == "table"
                             and type(arrow.Data.Time) == "number"
@@ -382,6 +381,7 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                                 acquire(keyCode)
                                 local holdLength = math.max(0, tonumber(arrow.Data.Length) or 0)
                                 local capturedKey = keyCode
+                                local capturedArrow = arrow
                                 task.spawn(function()
                                     -- Data.Length is already expressed in song-time seconds;
                                     -- do not divide it by PlaybackSpeed a second time.
@@ -763,4 +763,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V20 loaded. Chart-data AutoPlay with exact sustain lengths when available; GUI fallback enabled. Press F8 to toggle.")
+print("FunkyFridayHub V21 loaded. Sparse chart notes handled; note cleanup fixed. Press F8 to toggle.")
