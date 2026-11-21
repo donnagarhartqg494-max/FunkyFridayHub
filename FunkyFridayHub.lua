@@ -1,5 +1,5 @@
--- FunkyFridayHub V8
--- Predictive AutoPlay with tail-based sustain release on both sides.
+-- FunkyFridayHub V9
+-- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -49,7 +49,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V8  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V9  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -195,7 +195,9 @@ local function estimateHoldDuration(note, receptor, velocity)
     if extraLength < 12 then
         extraLength = math.max(0, maxVerticalExtent - noteWidth)
     end
-    return math.clamp(extraLength / velocity, 0.05, 8)
+    -- The chart's rendered tail can visually end before its hold window ends.
+    -- Add a one-second tail safety margin to avoid releasing before completion.
+    return math.clamp((extraLength / velocity) + 1.0, 0.05, 8)
 end
 
 makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
@@ -209,22 +211,51 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
         return
     end
 
-    local lanes = {}
-    for _, sideName in ipairs({"Left", "Right"}) do
-        local side = fields:FindFirstChild(sideName)
-        local inner = side and side:FindFirstChild("Inner")
-        for laneIndex = 1, 4 do
-            local lane = inner and inner:FindFirstChild("Lane" .. laneIndex)
-            local notes = lane and lane:FindFirstChild("Notes")
-            local receptor = lane and lane:FindFirstChild("Receptor")
-            if notes and receptor and receptor:IsA("GuiObject") then
-                lanes[#lanes + 1] = {
-                    side = sideName,
-                    index = laneIndex,
-                    notes = notes,
-                    receptor = receptor
-                }
+    -- Try to identify the local player's side from labels/attributes in the game UI.
+    -- In solo mode the right field is the usual player field, used as fallback.
+    local function detectPlayerSide()
+        local playerNames = {string.lower(Player.Name), string.lower(Player.DisplayName)}
+        for _, sideName in ipairs({"Left", "Right"}) do
+            local side = fields:FindFirstChild(sideName)
+            if side then
+                for _, obj in ipairs(side:GetDescendants()) do
+                    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                        local label = string.lower(obj.Text or "")
+                        for _, playerName in ipairs(playerNames) do
+                            if playerName ~= "" and string.find(label, playerName, 1, true) then
+                                return sideName
+                            end
+                        end
+                    end
+                    for key, value in pairs(obj:GetAttributes()) do
+                        local k = string.lower(tostring(key))
+                        local v = string.lower(tostring(value))
+                        if (string.find(k, "player") or string.find(k, "owner"))
+                            and (v == string.lower(Player.Name) or v == string.lower(Player.DisplayName)) then
+                            return sideName
+                        end
+                    end
+                end
             end
+        end
+        return "Right"
+    end
+
+    local playerSide = detectPlayerSide()
+    local lanes = {}
+    local side = fields:FindFirstChild(playerSide)
+    local inner = side and side:FindFirstChild("Inner")
+    for laneIndex = 1, 4 do
+        local lane = inner and inner:FindFirstChild("Lane" .. laneIndex)
+        local notes = lane and lane:FindFirstChild("Notes")
+        local receptor = lane and lane:FindFirstChild("Receptor")
+        if notes and receptor and receptor:IsA("GuiObject") then
+            lanes[#lanes + 1] = {
+                side = playerSide,
+                index = laneIndex,
+                notes = notes,
+                receptor = receptor
+            }
         end
     end
     if #lanes == 0 then
@@ -233,7 +264,7 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
     end
 
     running = true
-    Status.Text = "AUTOPLAY ACTIVE: LEFT + RIGHT"
+    Status.Text = "AUTOPLAY ACTIVE: " .. string.upper(playerSide)
     Status.TextColor3 = Color3.fromRGB(110, 230, 150)
     task.spawn(function()
         local seen = {}
@@ -483,4 +514,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V8 loaded. Sustain release estimates trailing-tail travel; both sides enabled. Keys A/S/W/D. Press F8 to toggle.")
+print("FunkyFridayHub V9 loaded. AutoPlay targets detected local side only; sustain hold includes 1s tail margin. Keys A/S/W/D. Press F8 to toggle.")
