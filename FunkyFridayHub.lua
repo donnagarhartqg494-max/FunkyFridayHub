@@ -1,4 +1,4 @@
--- FunkyFridayHub V11
+-- FunkyFridayHub V12
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -161,59 +161,49 @@ local function releaseLane(laneIndex)
     end
 end
 
-local function isSustainNote(note)
-    local noteWidth = math.max(1, note.AbsoluteSize.X)
+local function getSustainExtent(note)
+    -- Detect even short sustain tails. The chart renders the head and tail
+    -- inside the note frame / LayeredSprite, so compare child geometry against
+    -- the note-head footprint rather than requiring a very tall child.
+    local width = math.max(1, note.AbsoluteSize.X)
+    local headHeight = width
+    local maxExtent = math.max(note.AbsoluteSize.Y, headHeight)
+    local foundTail = false
+
     for _, child in ipairs(note:GetDescendants()) do
-        if child:IsA("GuiObject") then
+        if child:IsA("GuiObject") and child.Visible then
             local n = string.lower(child.Name)
-            if string.find(n, "hold") or string.find(n, "sustain")
-                or string.find(n, "tail") or string.find(n, "body") then
-                return true
-            end
-            if child.AbsoluteSize.Y > math.max(48, noteWidth * 1.35) then
-                return true
+            local namedTail = string.find(n, "hold")
+                or string.find(n, "sustain")
+                or string.find(n, "tail")
+                or string.find(n, "body")
+            local h = child.AbsoluteSize.Y
+            -- A tail can be only a few pixels longer than the head.
+            if namedTail or h > headHeight + 6 then
+                foundTail = true
+                maxExtent = math.max(maxExtent, h)
             end
         end
     end
-    return note.AbsoluteSize.Y > math.max(48, noteWidth * 1.35)
+
+    if note.AbsoluteSize.Y > headHeight + 8 then
+        foundTail = true
+        maxExtent = math.max(maxExtent, note.AbsoluteSize.Y)
+    end
+
+    if not foundTail then return nil end
+    return math.max(0, maxExtent - headHeight)
+end
+
+local function isSustainNote(note)
+    return getSustainExtent(note) ~= nil
 end
 
 local function estimateHoldDuration(note, receptor, velocity)
-    if velocity <= 0 then return 0.05 end
-
-    local headHeight = math.max(note.AbsoluteSize.X, note.AbsoluteSize.Y)
-    local noteWidth = math.max(1, note.AbsoluteSize.X)
-    local maxVerticalExtent = note.AbsoluteSize.Y
-    local hasSustainPart = false
-
-    -- Sustain graphics can be nested inside LayeredSprite; inspect every GUI
-    -- descendant and detect either an explicitly named tail/body or a tall part.
-    for _, child in ipairs(note:GetDescendants()) do
-        if child:IsA("GuiObject") then
-            local childName = string.lower(child.Name)
-            local tallPart = child.AbsoluteSize.Y > math.max(40, noteWidth * 1.15)
-            local namedPart = string.find(childName, "hold")
-                or string.find(childName, "sustain")
-                or string.find(childName, "tail")
-                or string.find(childName, "body")
-            if tallPart or namedPart then
-                hasSustainPart = true
-                maxVerticalExtent = math.max(maxVerticalExtent, child.AbsoluteSize.Y)
-            end
-        end
-    end
-
-    if not hasSustainPart then return 0.05 end
-
-    -- The note head is one note-height; hold until the trailing end clears
-    -- the receptor. Subtract the head itself so taps remain short.
-    local extraLength = math.max(0, maxVerticalExtent - headHeight)
-    if extraLength < 12 then
-        extraLength = math.max(0, maxVerticalExtent - noteWidth)
-    end
-    -- The chart's rendered tail can visually end before its hold window ends.
-    -- Add a one-second tail safety margin to avoid releasing before completion.
-    return math.clamp((extraLength / velocity) + 1.0, 0.05, 8)
+    local extent = getSustainExtent(note)
+    if not extent or velocity <= 0 then return 0.05 end
+    -- Small tails still receive a real hold; never force a one-second hold.
+    return math.clamp(extent / velocity, 0.06, 8)
 end
 
 makeButton("PLAYER SIDE: LEFT  (CLICK TO SWITCH)", 95, function()
