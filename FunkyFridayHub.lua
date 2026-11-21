@@ -1,4 +1,4 @@
--- FunkyFridayHub V14
+-- FunkyFridayHub V15
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -195,7 +195,11 @@ end
 local function estimateHoldDuration(note, receptor, velocity)
     local extent = getSustainExtent(note)
     if not extent or velocity <= 0 then return 0.05 end
-    return math.clamp(extent / velocity, 0.05, 8)
+    -- Short sustains are especially easy to release early due to frame jitter.
+    -- Add a modest safety buffer that scales down for longer tails.
+    local raw = extent / velocity
+    local safety = math.clamp(0.10, 0.04, 0.10)
+    return math.clamp(raw + safety, 0.08, 8)
 end
 
 makeButton("PLAYER SIDE: LEFT  (CLICK TO SWITCH)", 95, function()
