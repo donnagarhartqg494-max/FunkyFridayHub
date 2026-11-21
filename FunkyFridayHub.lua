@@ -44,17 +44,20 @@ Stroke.Color = Color3.fromRGB(85, 105, 160)
 Stroke.Thickness = 1
 Stroke.Parent = Main
 
-local Title = Instance.new("TextLabel")
+local Title = Instance.new("TextButton")
 Title.Name = "Title"
 Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
-Title.BackgroundTransparency = 1
-Title.Text = "FunkyFridayHub V3  |  drag here"
+Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
+Title.BorderSizePixel = 0
+Title.Text = "FunkyFridayHub V3  |  DRAG HERE"
 Title.TextColor3 = Color3.new(1, 1, 1)
-Title.TextSize = 19
+Title.TextSize = 18
 Title.Font = Enum.Font.GothamBold
+Title.AutoButtonColor = false
 Title.Active = true
 Title.Parent = Main
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 8)
 
 local Status = Instance.new("TextLabel")
 Status.Size = UDim2.new(1, -40, 0, 30)
@@ -137,9 +140,8 @@ makeButton("UNLOAD", 295, function()
     Screen:Destroy()
 end)
 
--- Drag the window by its title bar.
+-- Reliable title-bar dragging (mouse and touch).
 local dragging = false
-local dragInput = nil
 local dragStart = nil
 local startPosition = nil
 
@@ -149,13 +151,13 @@ connections[#connections + 1] = Title.InputBegan:Connect(function(input)
         dragging = true
         dragStart = input.Position
         startPosition = Main.Position
-        dragInput = input
     end
 end)
 
 connections[#connections + 1] = UIS.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch) then
+    if not dragging then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
         local delta = input.Position - dragStart
         Main.Position = UDim2.new(
             startPosition.X.Scale,
@@ -167,10 +169,9 @@ connections[#connections + 1] = UIS.InputChanged:Connect(function(input)
 end)
 
 connections[#connections + 1] = UIS.InputEnded:Connect(function(input)
-    if input == dragInput or input.UserInputType == Enum.UserInputType.MouseButton1
+    if input.UserInputType == Enum.UserInputType.MouseButton1
         or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
-        dragInput = nil
     end
 end)
 
@@ -180,4 +181,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V3 loaded. Drag the title bar. Press F8 to toggle.")
+print("FunkyFridayHub V3.1 loaded. Drag the highlighted title bar. Press F8 to toggle. AutoPlay is not yet configured.")
