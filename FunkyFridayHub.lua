@@ -1,4 +1,4 @@
--- FunkyFridayHub V16
+-- FunkyFridayHub V18
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -6,11 +6,25 @@ local UIS = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local Player = Players.LocalPlayer
 
-local old
+-- Remove previous copies from every possible GUI root so the latest
+-- version is always the one visible after re-executing the loader.
+local guiRoots = {CoreGui}
 pcall(function()
-    old = CoreGui:FindFirstChild("FunkyFridayHub")
-    if old then old:Destroy() end
+    if type(gethui) == "function" then
+        local hui = gethui()
+        if hui then table.insert(guiRoots, hui) end
+    end
 end)
+pcall(function()
+    local pg = Player:FindFirstChildOfClass("PlayerGui")
+    if pg then table.insert(guiRoots, pg) end
+end)
+for _, root in ipairs(guiRoots) do
+    pcall(function()
+        local previous = root:FindFirstChild("FunkyFridayHub")
+        if previous then previous:Destroy() end
+    end)
+end
 
 local Screen = Instance.new("ScreenGui")
 Screen.Name = "FunkyFridayHub"
@@ -49,7 +63,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V17  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V18  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -735,4 +749,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V17 loaded. Chart-data AutoPlay with exact sustain lengths when available; GUI fallback enabled. Press F8 to toggle.")
+print("FunkyFridayHub V18 loaded. Chart-data AutoPlay with exact sustain lengths when available; GUI fallback enabled. Press F8 to toggle.")
