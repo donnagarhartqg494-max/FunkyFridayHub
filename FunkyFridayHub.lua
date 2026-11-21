@@ -1,4 +1,4 @@
--- FunkyFridayHub V15
+-- FunkyFridayHub V16
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -30,8 +30,8 @@ end
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(430, 470)
-Main.Position = UDim2.new(0.5, -215, 0.5, -235)
+Main.Size = UDim2.fromOffset(430, 520)
+Main.Position = UDim2.new(0.5, -215, 0.5, -260)
 Main.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -403,6 +403,75 @@ makeButton("SCAN GAME UI", 245, function()
     Status.Text = "SCAN COMPLETE: " .. found .. " matches + note details (see console)"
 end)
 
+makeButton("DIAGNOSE SHORT HOLDS 10s", 345, function()
+    local pg = Player:FindFirstChildOfClass("PlayerGui")
+    local fields = pg and pg:FindFirstChild("Window")
+    fields = fields and fields:FindFirstChild("Game")
+    fields = fields and fields:FindFirstChild("Fields")
+    if not fields then
+        Status.Text = "GAME FIELDS NOT FOUND"
+        return
+    end
+
+    Status.Text = "DIAGNOSTIC: PLAY A SHORT HOLD"
+    print("=== SHORT HOLD DIAGNOSTIC START (10s) ===")
+    local tracked = {}
+    local cons = {}
+    local function dump(obj, sideName, laneIndex)
+        if not obj:IsA("GuiObject") or tracked[obj] then return end
+        tracked[obj] = {side=sideName, lane=laneIndex, lastY=nil, lastT=nil, samples=0}
+        print("SHORT-HOLD ADD", sideName, "Lane"..laneIndex, obj.Name,
+            "Class", obj.ClassName, "Position", tostring(obj.Position),
+            "AbsolutePosition", tostring(obj.AbsolutePosition),
+            "AbsoluteSize", tostring(obj.AbsoluteSize),
+            "AnchorPoint", tostring(obj.AnchorPoint))
+        for _, child in ipairs(obj:GetDescendants()) do
+            if child:IsA("GuiObject") then
+                print("  PART", child:GetFullName(), child.ClassName,
+                    "Position", tostring(child.Position),
+                    "AbsPos", tostring(child.AbsolutePosition),
+                    "AbsSize", tostring(child.AbsoluteSize),
+                    "Visible", tostring(child.Visible),
+                    "ClipsDescendants", tostring(child.ClipsDescendants))
+            end
+        end
+    end
+
+    for _, sideName in ipairs({"Left", "Right"}) do
+        local side = fields:FindFirstChild(sideName)
+        local inner = side and side:FindFirstChild("Inner")
+        for laneIndex=1,4 do
+            local lane = inner and inner:FindFirstChild("Lane"..laneIndex)
+            local notes = lane and lane:FindFirstChild("Notes")
+            if notes then
+                for _, obj in ipairs(notes:GetChildren()) do dump(obj, sideName, laneIndex) end
+                cons[#cons+1] = notes.ChildAdded:Connect(function(obj)
+                    dump(obj, sideName, laneIndex)
+                end)
+            end
+        end
+    end
+
+    local started = os.clock()
+    while os.clock()-started < 10 do
+        for obj, info in pairs(tracked) do
+            if obj.Parent and obj:IsA("GuiObject") and info.samples < 10 then
+                local now, y = os.clock(), obj.AbsolutePosition.Y
+                info.samples += 1
+                print("SHORT-HOLD SAMPLE", info.side, "Lane"..info.lane,
+                    obj.Name, "t", string.format("%.3f", now-started),
+                    "Y", y, "Size", tostring(obj.AbsoluteSize),
+                    "Visible", tostring(obj.Visible))
+                info.lastY, info.lastT = y, now
+            end
+        end
+        task.wait(0.08)
+    end
+    for _, c in ipairs(cons) do pcall(function() c:Disconnect() end) end
+    Status.Text = "DIAGNOSTIC COMPLETE: CHECK OUTPUT"
+    print("=== SHORT HOLD DIAGNOSTIC END ===")
+end)
+
 makeButton("TRACK NOTE MOTION 8s", 295, function()
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     local fields = pg and pg:FindFirstChild("Window")
@@ -477,11 +546,11 @@ makeButton("TRACK NOTE MOTION 8s", 295, function()
     print("=== NOTE MOTION TRACK END ===")
 end)
 
-makeButton("HIDE MENU  [F8]", 345, function()
+makeButton("HIDE MENU  [F8]", 395, function()
     Main.Visible = false
 end)
 
-makeButton("UNLOAD", 395, function()
+makeButton("UNLOAD", 445, function()
     running = false
     releaseAll()
     for _, c in ipairs(connections) do
