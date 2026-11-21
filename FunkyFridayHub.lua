@@ -1,5 +1,5 @@
--- FunkyFridayHub V5
--- Predictive two-side AutoPlay, draggable GUI, diagnostics.
+-- FunkyFridayHub V6
+-- Predictive two-side AutoPlay with sustain-note holds.
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -49,7 +49,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V5  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V6  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -139,9 +139,15 @@ local function releaseAll()
     end
 end
 
-local function tapLane(laneIndex)
+local function tapLane(laneIndex, holdDuration)
     local now = os.clock()
-    if pressedKeys[laneIndex] or (lastPress[laneIndex] and now - lastPress[laneIndex] < 0.035) then
+    holdDuration = math.clamp(holdDuration or 0.05, 0.05, 8)
+    if pressedKeys[laneIndex] then
+        -- If another sustain overlaps, keep the key down until the later end.
+        pressedKeys[laneIndex] = math.max(pressedKeys[laneIndex], now + holdDuration)
+        return
+    end
+    if lastPress[laneIndex] and now - lastPress[laneIndex] < 0.025 then
         return
     end
     local ok = sendKey(laneIndex, true)
@@ -152,14 +158,34 @@ local function tapLane(laneIndex)
         releaseAll()
         return
     end
-    pressedKeys[laneIndex] = true
+    pressedKeys[laneIndex] = now + holdDuration
     lastPress[laneIndex] = now
-    task.delay(0.035, function()
-        if pressedKeys[laneIndex] then
-            sendKey(laneIndex, false)
-            pressedKeys[laneIndex] = nil
+end
+
+local function estimateHoldDuration(note, receptor, velocity)
+    -- Sustains are commonly represented by a stretched note frame or a
+    -- child body/tail. Use the longest visible GUI dimension as a duration hint.
+    local baseHeight = receptor.AbsoluteSize.Y
+    local longest = note.AbsoluteSize.Y
+    local sustainNamed = false
+    for _, child in ipairs(note:GetDescendants()) do
+        if child:IsA("GuiObject") then
+            longest = math.max(longest, child.AbsoluteSize.Y)
+            local name = string.lower(child.Name)
+            if string.find(name, "hold") or string.find(name, "sustain")
+                or string.find(name, "tail") or string.find(name, "body") then
+                sustainNamed = true
+            end
         end
-    end)
+    end
+    local extraHeight = math.max(0, longest - baseHeight)
+    if sustainNamed and extraHeight < 12 then
+        extraHeight = math.max(extraHeight, baseHeight)
+    end
+    if velocity <= 0 or extraHeight < 12 then
+        return 0.05
+    end
+    return math.clamp(extraHeight / velocity, 0.05, 8)
 end
 
 makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
@@ -206,6 +232,12 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
         local MAX_HIT_LATE = 0.025
         while running do
             local now = os.clock()
+            for laneIndex, releaseAt in pairs(pressedKeys) do
+                if now >= releaseAt then
+                    sendKey(laneIndex, false)
+                    pressedKeys[laneIndex] = nil
+                end
+            end
             for _, laneData in ipairs(lanes) do
                 local receptor = laneData.receptor
                 local targetY = receptor.AbsolutePosition.Y + receptor.AbsoluteSize.Y * 0.5
@@ -220,7 +252,8 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
                                 local timeToHit = (targetY - noteY) / velocity
                                 if timeToHit <= INPUT_LEAD and timeToHit >= -MAX_HIT_LATE then
                                     seen[note] = true
-                                    tapLane(laneData.index)
+                                    local holdDuration = estimateHoldDuration(note, receptor, velocity)
+                                    tapLane(laneData.index, holdDuration)
                                 end
                             end
                         end
@@ -440,4 +473,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V5 loaded. Predictive AutoPlay scans both sides. Keys A/S/W/D. Press F8 to toggle.")
+print("FunkyFridayHub V6 loaded. Predictive AutoPlay + sustain holds on both sides. Keys A/S/W/D. Press F8 to toggle.")
