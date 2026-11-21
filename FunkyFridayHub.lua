@@ -1,5 +1,5 @@
--- FunkyFridayHub V7
--- Head-aligned predictive AutoPlay with sustain-note holds on both sides.
+-- FunkyFridayHub V8
+-- Predictive AutoPlay with tail-based sustain release on both sides.
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -49,7 +49,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V7  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V8  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -163,29 +163,39 @@ local function tapLane(laneIndex, holdDuration)
 end
 
 local function estimateHoldDuration(note, receptor, velocity)
-    -- Sustains are commonly represented by a stretched note frame or a
-    -- child body/tail. Use the longest visible GUI dimension as a duration hint.
-    local baseHeight = receptor.AbsoluteSize.Y
-    local longest = note.AbsoluteSize.Y
-    local sustainNamed = false
+    if velocity <= 0 then return 0.05 end
+
+    local headHeight = math.max(note.AbsoluteSize.X, note.AbsoluteSize.Y)
+    local noteWidth = math.max(1, note.AbsoluteSize.X)
+    local maxVerticalExtent = note.AbsoluteSize.Y
+    local hasSustainPart = false
+
+    -- Sustain graphics can be nested inside LayeredSprite; inspect every GUI
+    -- descendant and detect either an explicitly named tail/body or a tall part.
     for _, child in ipairs(note:GetDescendants()) do
         if child:IsA("GuiObject") then
-            longest = math.max(longest, child.AbsoluteSize.Y)
-            local name = string.lower(child.Name)
-            if string.find(name, "hold") or string.find(name, "sustain")
-                or string.find(name, "tail") or string.find(name, "body") then
-                sustainNamed = true
+            local childName = string.lower(child.Name)
+            local tallPart = child.AbsoluteSize.Y > math.max(40, noteWidth * 1.15)
+            local namedPart = string.find(childName, "hold")
+                or string.find(childName, "sustain")
+                or string.find(childName, "tail")
+                or string.find(childName, "body")
+            if tallPart or namedPart then
+                hasSustainPart = true
+                maxVerticalExtent = math.max(maxVerticalExtent, child.AbsoluteSize.Y)
             end
         end
     end
-    local extraHeight = math.max(0, longest - baseHeight)
-    if sustainNamed and extraHeight < 12 then
-        extraHeight = math.max(extraHeight, baseHeight)
+
+    if not hasSustainPart then return 0.05 end
+
+    -- The note head is one note-height; hold until the trailing end clears
+    -- the receptor. Subtract the head itself so taps remain short.
+    local extraLength = math.max(0, maxVerticalExtent - headHeight)
+    if extraLength < 12 then
+        extraLength = math.max(0, maxVerticalExtent - noteWidth)
     end
-    if velocity <= 0 or extraHeight < 12 then
-        return 0.05
-    end
-    return math.clamp(extraHeight / velocity, 0.05, 8)
+    return math.clamp(extraLength / velocity, 0.05, 8)
 end
 
 makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
@@ -473,4 +483,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V7 loaded. Note-head timing corrected; sustain holds enabled on both sides. Keys A/S/W/D. Press F8 to toggle.")
+print("FunkyFridayHub V8 loaded. Sustain release estimates trailing-tail travel; both sides enabled. Keys A/S/W/D. Press F8 to toggle.")
