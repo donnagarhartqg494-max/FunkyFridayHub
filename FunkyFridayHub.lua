@@ -1,4 +1,4 @@
--- FunkyFridayHub V10
+-- FunkyFridayHub V11
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -30,8 +30,8 @@ end
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
-Main.Size = UDim2.fromOffset(430, 420)
-Main.Position = UDim2.new(0.5, -215, 0.5, -210)
+Main.Size = UDim2.fromOffset(430, 470)
+Main.Position = UDim2.new(0.5, -215, 0.5, -235)
 Main.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -107,6 +107,7 @@ local function makeButton(text, y, callback)
 end
 
 local running = false
+local selectedSide = "Left"
 local connections = {}
 local pressedKeys = {}
 local lastPress = {}
@@ -215,7 +216,20 @@ local function estimateHoldDuration(note, receptor, velocity)
     return math.clamp((extraLength / velocity) + 1.0, 0.05, 8)
 end
 
-makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
+makeButton("PLAYER SIDE: LEFT  (CLICK TO SWITCH)", 95, function()
+    if running then
+        Status.Text = "STOP AUTOPLAY BEFORE CHANGING SIDE"
+        return
+    end
+    selectedSide = selectedSide == "Left" and "Right" or "Left"
+    local sideButton = Main:FindFirstChild("PLAYER_SIDE_BUTTON")
+    if sideButton then
+        sideButton.Text = "PLAYER SIDE: " .. string.upper(selectedSide) .. "  (CLICK TO SWITCH)"
+    end
+    Status.Text = "SELECTED SIDE: " .. string.upper(selectedSide)
+end).Name = "PLAYER_SIDE_BUTTON"
+
+makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
     if running then return end
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     local fields = pg and pg:FindFirstChild("Window")
@@ -226,68 +240,7 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
         return
     end
 
-    local function detectPlayerSide()
-        local wanted = {
-            [string.lower(Player.Name)] = true,
-            [string.lower(Player.DisplayName)] = true,
-            [tostring(Player.UserId)] = true
-        }
-        for _, obj in ipairs(pg:GetDescendants()) do
-            local candidate
-            if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-                candidate = string.lower(obj.Text or "")
-            elseif obj:IsA("StringValue") then
-                candidate = string.lower(obj.Value or "")
-            end
-            local matched = false
-            if candidate then
-                for name in pairs(wanted) do
-                    if name ~= "" and string.find(candidate, name, 1, true) then
-                        matched = true
-                        break
-                    end
-                end
-            end
-            if not matched then
-                for key, value in pairs(obj:GetAttributes()) do
-                    local k, v = string.lower(tostring(key)), string.lower(tostring(value))
-                    if (string.find(k, "player") or string.find(k, "owner")
-                        or string.find(k, "userid") or string.find(k, "user_id")) and wanted[v] then
-                        matched = true
-                        break
-                    end
-                end
-            end
-            if matched then
-                local node = obj
-                while node and node ~= pg do
-                    if node == fields:FindFirstChild("Left") then return "Left" end
-                    if node == fields:FindFirstChild("Right") then return "Right" end
-                    node = node.Parent
-                end
-            end
-        end
-        return nil
-    end
-
-    local playerSide = detectPlayerSide()
-    if not playerSide then
-        Status.Text = "PLAYER SIDE UNKNOWN - NOT STARTED"
-        Status.TextColor3 = Color3.fromRGB(255, 190, 90)
-        warn("FunkyFridayHub: couldn't identify your side; refusing to hit opponent notes.")
-        for _, sideName in ipairs({"Left", "Right"}) do
-            local sideObj = fields:FindFirstChild(sideName)
-            if sideObj then
-                for _, obj in ipairs(sideObj:GetDescendants()) do
-                    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-                        local label = (obj.Text or ""):gsub("%s+", " ")
-                        if label ~= "" then print("SIDE LABEL", sideName, label) end
-                    end
-                end
-            end
-        end
-        return
-    end
+    local playerSide = selectedSide
 
     local lanes = {}
     local side = fields:FindFirstChild(playerSide)
@@ -311,7 +264,7 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
     end
 
     running = true
-    Status.Text = "AUTOPLAY: YOUR SIDE ONLY (" .. string.upper(playerSide) .. ")"
+    Status.Text = "AUTOPLAY: " .. string.upper(playerSide) .. " SIDE ONLY"
     Status.TextColor3 = Color3.fromRGB(110, 230, 150)
     task.spawn(function()
         local seen = {}
@@ -386,14 +339,14 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
     end)
 end)
 
-makeButton("STOP AUTOPLAY", 145, function()
+makeButton("STOP AUTOPLAY", 195, function()
     running = false
     releaseAll()
     Status.Text = "STATUS: STOPPED"
     Status.TextColor3 = Color3.fromRGB(255, 110, 110)
 end)
 
-makeButton("SCAN GAME UI", 195, function()
+makeButton("SCAN GAME UI", 245, function()
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     if not pg then
         Status.Text = "PlayerGui not found"
@@ -456,7 +409,7 @@ makeButton("SCAN GAME UI", 195, function()
     Status.Text = "SCAN COMPLETE: " .. found .. " matches + note details (see console)"
 end)
 
-makeButton("TRACK NOTE MOTION 8s", 245, function()
+makeButton("TRACK NOTE MOTION 8s", 295, function()
     local pg = Player:FindFirstChildOfClass("PlayerGui")
     local fields = pg and pg:FindFirstChild("Window")
     fields = fields and fields:FindFirstChild("Game")
@@ -530,11 +483,11 @@ makeButton("TRACK NOTE MOTION 8s", 245, function()
     print("=== NOTE MOTION TRACK END ===")
 end)
 
-makeButton("HIDE MENU  [F8]", 295, function()
+makeButton("HIDE MENU  [F8]", 345, function()
     Main.Visible = false
 end)
 
-makeButton("UNLOAD", 345, function()
+makeButton("UNLOAD", 395, function()
     running = false
     releaseAll()
     for _, c in ipairs(connections) do
@@ -586,4 +539,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V10 loaded. Strict side detection; sustain keys held until note object disappears. Keys A/S/W/D. Press F8 to toggle.")
+print("FunkyFridayHub V11 loaded. Manual side selection; sustain keys held until note object disappears. Keys A/S/W/D. Press F8 to toggle.")
