@@ -1,4 +1,4 @@
--- FunkyFridayHub V9
+-- FunkyFridayHub V10
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -49,7 +49,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V9  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V10  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -139,27 +139,42 @@ local function releaseAll()
     end
 end
 
-local function tapLane(laneIndex, holdDuration)
-    local now = os.clock()
-    holdDuration = math.clamp(holdDuration or 0.05, 0.05, 8)
-    if pressedKeys[laneIndex] then
-        -- If another sustain overlaps, keep the key down until the later end.
-        pressedKeys[laneIndex] = math.max(pressedKeys[laneIndex], now + holdDuration)
-        return
-    end
-    if lastPress[laneIndex] and now - lastPress[laneIndex] < 0.025 then
-        return
-    end
+local function pressLane(laneIndex)
+    if pressedKeys[laneIndex] then return true end
     local ok = sendKey(laneIndex, true)
     if not ok then
         running = false
         Status.Text = "INPUT BLOCKED BY EXECUTOR"
         Status.TextColor3 = Color3.fromRGB(255, 110, 110)
         releaseAll()
-        return
+        return false
     end
-    pressedKeys[laneIndex] = now + holdDuration
-    lastPress[laneIndex] = now
+    pressedKeys[laneIndex] = true
+    return true
+end
+
+local function releaseLane(laneIndex)
+    if pressedKeys[laneIndex] then
+        sendKey(laneIndex, false)
+        pressedKeys[laneIndex] = nil
+    end
+end
+
+local function isSustainNote(note)
+    local noteWidth = math.max(1, note.AbsoluteSize.X)
+    for _, child in ipairs(note:GetDescendants()) do
+        if child:IsA("GuiObject") then
+            local n = string.lower(child.Name)
+            if string.find(n, "hold") or string.find(n, "sustain")
+                or string.find(n, "tail") or string.find(n, "body") then
+                return true
+            end
+            if child.AbsoluteSize.Y > math.max(48, noteWidth * 1.35) then
+                return true
+            end
+        end
+    end
+    return note.AbsoluteSize.Y > math.max(48, noteWidth * 1.35)
 end
 
 local function estimateHoldDuration(note, receptor, velocity)
@@ -211,37 +226,69 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
         return
     end
 
-    -- Try to identify the local player's side from labels/attributes in the game UI.
-    -- In solo mode the right field is the usual player field, used as fallback.
     local function detectPlayerSide()
-        local playerNames = {string.lower(Player.Name), string.lower(Player.DisplayName)}
-        for _, sideName in ipairs({"Left", "Right"}) do
-            local side = fields:FindFirstChild(sideName)
-            if side then
-                for _, obj in ipairs(side:GetDescendants()) do
-                    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-                        local label = string.lower(obj.Text or "")
-                        for _, playerName in ipairs(playerNames) do
-                            if playerName ~= "" and string.find(label, playerName, 1, true) then
-                                return sideName
-                            end
-                        end
+        local wanted = {
+            [string.lower(Player.Name)] = true,
+            [string.lower(Player.DisplayName)] = true,
+            [tostring(Player.UserId)] = true
+        }
+        for _, obj in ipairs(pg:GetDescendants()) do
+            local candidate
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                candidate = string.lower(obj.Text or "")
+            elseif obj:IsA("StringValue") then
+                candidate = string.lower(obj.Value or "")
+            end
+            local matched = false
+            if candidate then
+                for name in pairs(wanted) do
+                    if name ~= "" and string.find(candidate, name, 1, true) then
+                        matched = true
+                        break
                     end
-                    for key, value in pairs(obj:GetAttributes()) do
-                        local k = string.lower(tostring(key))
-                        local v = string.lower(tostring(value))
-                        if (string.find(k, "player") or string.find(k, "owner"))
-                            and (v == string.lower(Player.Name) or v == string.lower(Player.DisplayName)) then
-                            return sideName
-                        end
+                end
+            end
+            if not matched then
+                for key, value in pairs(obj:GetAttributes()) do
+                    local k, v = string.lower(tostring(key)), string.lower(tostring(value))
+                    if (string.find(k, "player") or string.find(k, "owner")
+                        or string.find(k, "userid") or string.find(k, "user_id")) and wanted[v] then
+                        matched = true
+                        break
+                    end
+                end
+            end
+            if matched then
+                local node = obj
+                while node and node ~= pg do
+                    if node == fields:FindFirstChild("Left") then return "Left" end
+                    if node == fields:FindFirstChild("Right") then return "Right" end
+                    node = node.Parent
+                end
+            end
+        end
+        return nil
+    end
+
+    local playerSide = detectPlayerSide()
+    if not playerSide then
+        Status.Text = "PLAYER SIDE UNKNOWN - NOT STARTED"
+        Status.TextColor3 = Color3.fromRGB(255, 190, 90)
+        warn("FunkyFridayHub: couldn't identify your side; refusing to hit opponent notes.")
+        for _, sideName in ipairs({"Left", "Right"}) do
+            local sideObj = fields:FindFirstChild(sideName)
+            if sideObj then
+                for _, obj in ipairs(sideObj:GetDescendants()) do
+                    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                        local label = (obj.Text or ""):gsub("%s+", " ")
+                        if label ~= "" then print("SIDE LABEL", sideName, label) end
                     end
                 end
             end
         end
-        return "Right"
+        return
     end
 
-    local playerSide = detectPlayerSide()
     local lanes = {}
     local side = fields:FindFirstChild(playerSide)
     local inner = side and side:FindFirstChild("Inner")
@@ -264,19 +311,35 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
     end
 
     running = true
-    Status.Text = "AUTOPLAY ACTIVE: " .. string.upper(playerSide)
+    Status.Text = "AUTOPLAY: YOUR SIDE ONLY (" .. string.upper(playerSide) .. ")"
     Status.TextColor3 = Color3.fromRGB(110, 230, 150)
     task.spawn(function()
         local seen = {}
         local lastPositions = {}
+        local sustainHolds = {}
+        local tapReleaseAt = {}
         local INPUT_LEAD = 0.035 -- small latency compensation only
         local MAX_HIT_LATE = 0.025
         while running do
             local now = os.clock()
-            for laneIndex, releaseAt in pairs(pressedKeys) do
-                if now >= releaseAt then
-                    sendKey(laneIndex, false)
-                    pressedKeys[laneIndex] = nil
+            for laneIndex, releaseAt in pairs(tapReleaseAt) do
+                if now >= releaseAt and not sustainHolds[laneIndex] then
+                    releaseLane(laneIndex)
+                    tapReleaseAt[laneIndex] = nil
+                end
+            end
+            for laneIndex, heldNotes in pairs(sustainHolds) do
+                local active = false
+                for note in pairs(heldNotes) do
+                    if note.Parent and note.Visible then
+                        active = true
+                    else
+                        heldNotes[note] = nil
+                    end
+                end
+                if not active then
+                    sustainHolds[laneIndex] = nil
+                    releaseLane(laneIndex)
                 end
             end
             for _, laneData in ipairs(lanes) do
@@ -293,8 +356,17 @@ makeButton("START AUTOPLAY  |  BOTH SIDES", 95, function()
                                 local timeToHit = (targetY - noteY) / velocity
                                 if timeToHit <= INPUT_LEAD and timeToHit >= -MAX_HIT_LATE then
                                     seen[note] = true
-                                    local holdDuration = estimateHoldDuration(note, receptor, velocity)
-                                    tapLane(laneData.index, holdDuration)
+                                    if isSustainNote(note) then
+                                        if pressLane(laneData.index) then
+                                            sustainHolds[laneData.index] = sustainHolds[laneData.index] or {}
+                                            sustainHolds[laneData.index][note] = true
+                                        end
+                                    else
+                                        if pressLane(laneData.index) then
+                                            tapReleaseAt[laneData.index] = math.max(
+                                                tapReleaseAt[laneData.index] or 0, now + 0.05)
+                                        end
+                                    end
                                 end
                             end
                         end
@@ -514,4 +586,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V9 loaded. AutoPlay targets detected local side only; sustain hold includes 1s tail margin. Keys A/S/W/D. Press F8 to toggle.")
+print("FunkyFridayHub V10 loaded. Strict side detection; sustain keys held until note object disappears. Keys A/S/W/D. Press F8 to toggle.")
