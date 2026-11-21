@@ -1,4 +1,4 @@
--- FunkyFridayHub V21
+-- FunkyFridayHub V22
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -63,7 +63,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V21  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V22  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -291,6 +291,7 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                 enumByValue[enum.Value] = enum
             end
             local activeCounts = {}
+            local ignoredTypes = { Death = true, Mechanic = true, Poison = true }
             local function frameworkKey(keyCode, down)
                 if not keyCode then return false end
                 if virtualInput then
@@ -346,7 +347,13 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
 
                 if ok and type(arrows) == "table" and type(arrowData) == "table" then
                     local currentSide = framework.UI.CurrentSide
-                    local ignoredTypes = { Death = true, Mechanic = true, Poison = true }
+                    local hitOffset = 0
+                    pcall(function()
+                        local settings = framework.Settings
+                        local value = settings and settings.HitboxOffset
+                            and settings.HitboxOffset.Value
+                        if type(value) == "number" then hitOffset = value / 1000 end
+                    end)
                     -- GetNotes() may be sparse, so iterate all entries.
                     for _, arrow in next, arrows do
                         if type(arrow) == "table" and arrow.Side == currentSide
@@ -361,22 +368,15 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                             local keyboard = laneInfo and laneInfo.Keybinds
                                 and laneInfo.Keybinds.Keyboard
                             local keyCode = keyboard and enumByValue[keyboard[1]]
-                            local hitOffset = 0
-                            pcall(function()
-                                local settings = framework.Settings
-                                local value = settings and settings.HitboxOffset
-                                    and settings.HitboxOffset.Value
-                                if type(value) == "number" then hitOffset = value / 1000 end
-                            end)
-
-                            -- Match the reference AutoPlay timing calculation:
-                            -- 96% corresponds to a 40 ms hit window around Data.Time.
+                            -- Wider timing window helps catch notes when animated
+                            -- backgrounds or effects briefly lower the frame rate.
+                            -- 92% corresponds to roughly an 80 ms window around Data.Time.
                             local noteTime = math.clamp(
                                 (1 - math.abs(arrow.Data.Time - (songTime + hitOffset))) * 100,
                                 0,
                                 100
                             )
-                            if keyCode and noteTime >= 96 then
+                            if keyCode and noteTime >= 92 then
                                 arrow.Marked = true
                                 acquire(keyCode)
                                 local holdLength = math.max(0, tonumber(arrow.Data.Length) or 0)
@@ -763,4 +763,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V21 loaded. Sparse chart notes handled; note cleanup fixed. Press F8 to toggle.")
+print("FunkyFridayHub V22 loaded. Faster chart scanning and wider hit window enabled. Press F8 to toggle.")
