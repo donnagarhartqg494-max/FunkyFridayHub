@@ -1,4 +1,4 @@
--- FunkyFridayHub V18
+-- FunkyFridayHub V19
 -- Local-side-only AutoPlay with extended sustain hold.
 
 local Players = game:GetService("Players")
@@ -63,7 +63,7 @@ Title.Size = UDim2.new(1, -20, 0, 45)
 Title.Position = UDim2.fromOffset(10, 4)
 Title.BackgroundColor3 = Color3.fromRGB(29, 34, 49)
 Title.BorderSizePixel = 0
-Title.Text = "   FUNKY FRIDAY HUB V18  |  DRAG HERE"
+Title.Text = "   FUNKY FRIDAY HUB V19  |  DRAG HERE"
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.TextColor3 = Color3.new(1, 1, 1)
 Title.TextSize = 18
@@ -364,22 +364,27 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                                 if type(value) == "number" then hitOffset = value / 1000 end
                             end)
 
-                            local delta = math.abs(arrow.Data.Time - (songTime + hitOffset))
-                            if keyCode and delta <= 0.04 then
+                            -- Match the reference AutoPlay timing calculation:
+                            -- 96% corresponds to a 40 ms hit window around Data.Time.
+                            local noteTime = math.clamp(
+                                (1 - math.abs(arrow.Data.Time - (songTime + hitOffset))) * 100,
+                                0,
+                                100
+                            )
+                            if keyCode and noteTime >= 96 then
                                 arrow.Marked = true
                                 acquire(keyCode)
                                 local holdLength = math.max(0, tonumber(arrow.Data.Length) or 0)
-                                local capturedArrow = arrow
                                 local capturedKey = keyCode
                                 task.spawn(function()
+                                    -- Data.Length is already expressed in song-time seconds;
+                                    -- do not divide it by PlaybackSpeed a second time.
                                     if holdLength > 0 then
-                                        task.wait(holdLength / playbackSpeed)
+                                        task.wait(holdLength)
                                     else
                                         task.wait(0.05)
                                     end
                                     release(capturedKey)
-                                    -- Keep the note marked until the game removes it,
-                                    -- preventing a second hit while its object is still present.
                                 end)
                             end
                         end
@@ -387,7 +392,8 @@ makeButton("START AUTOPLAY  |  SELECTED SIDE", 145, function()
                 elseif not ok then
                     warn("[FunkyFridayHub] Chart data read failed:", arrows)
                 end
-                task.wait()
+                -- Sample on the render frame for finer hit timing than task.wait().
+                game:GetService("RunService").RenderStepped:Wait()
             end
             for _, enum in pairs(Enum.KeyCode:GetEnumItems()) do
                 if activeCounts[enum.Name] then
@@ -749,4 +755,4 @@ connections[#connections + 1] = UIS.InputBegan:Connect(function(input, processed
     end
 end)
 
-print("FunkyFridayHub V18 loaded. Chart-data AutoPlay with exact sustain lengths when available; GUI fallback enabled. Press F8 to toggle.")
+print("FunkyFridayHub V19 loaded. Chart-data AutoPlay with exact sustain lengths when available; GUI fallback enabled. Press F8 to toggle.")
